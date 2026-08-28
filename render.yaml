@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sealed-bid-draft
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/state
+    envVars:
+      - key: NODE_VERSION
+        value: 22
