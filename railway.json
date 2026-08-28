@@ -2,10 +2,10 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "npm install && npm run build"
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm run build"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "pnpm start",
     "healthcheckPath": "/api/state",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",
