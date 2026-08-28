@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { Server } from "socket.io";
 import { z } from "zod";
@@ -50,6 +50,7 @@ const publicState = (viewerId?: string) => league && ({
     myBid: league.current.bids.find(b => b.managerId === viewerId)?.amount,
     myPassed: league.current.bids.find(b => b.managerId === viewerId)?.passed },
   results: league.results
+  ,ended: league.ended
 });
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
 let revealTimer: NodeJS.Timeout | null = null;
@@ -88,6 +89,7 @@ app.post("/api/commissioner-check", (req, res) => {
 });
 app.post("/api/nominate", (req, res) => {
   if (!league) return res.status(404).json({ error: "League not found." });
+  if (league.ended) return res.status(400).json({ error: "This league has ended." });
   if (league.current) return res.status(409).json({ error: "Resolve the current auction first." });
   const manager = findManager(String(req.body.managerId));
   const player = String(req.body.player || "").trim();
@@ -133,8 +135,17 @@ app.post("/api/reset", (req, res) => {
   if (revealTimer) clearTimeout(revealTimer);
   revealTimer = null;
   league.results = [];
+  league.ended = false;
   league.nominationIndex = 0;
   league.tieOrder = [...league.nominationOrder].reverse();
+  saveLeague(); broadcast(); res.json({ ok: true });
+});
+app.post("/api/end", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  league = null;
+  try { unlinkSync(stateFile); } catch {}
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = null;
   saveLeague(); broadcast(); res.json({ ok: true });
 });
 app.post("/api/pause", (req, res) => {
