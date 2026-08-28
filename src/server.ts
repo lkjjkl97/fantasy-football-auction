@@ -105,7 +105,7 @@ app.post("/api/nominate", (req, res) => {
   if (manager.rosterSlotsUsed >= 20) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
-    deadline: new Date(openedAt.getTime() + 20000).toISOString(),
+    deadline: new Date(openedAt.getTime() + 30000).toISOString(),
     bids: [{ managerId: manager.id, amount: openingBid, submittedAt: openedAt.toISOString() }] };
   saveLeague();
   scheduleReveal();
