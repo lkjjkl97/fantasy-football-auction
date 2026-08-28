@@ -13,6 +13,8 @@ main,#app,.card,.live{min-width:0;max-width:100%}
 .team-pill.on-clock{border-color:var(--lime);box-shadow:inset 0 0 0 1px var(--lime)}
 .order-number{display:none}
 .manager-input{grid-template-columns:35px minmax(0,1fr) minmax(90px,.65fr) auto}
+.priority{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible}
+.priority li{min-width:0}
 
 @media(max-width:900px){
   body{overflow-x:hidden}
@@ -30,6 +32,7 @@ main,#app,.card,.live{min-width:0;max-width:100%}
   .response-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
   .response{min-width:0}
   .team-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .priority{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .pin-check{flex-wrap:wrap}
   .pin-check label,.pin-check button{width:100%}
   .manager-input{grid-template-columns:30px minmax(0,1fr)}
