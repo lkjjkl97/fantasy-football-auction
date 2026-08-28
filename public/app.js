@@ -24,4 +24,4 @@ function fixNominatorCopy(){const c=state?.current;if(c&&$("#bidHelp").textConte
 function enforceTeamEntry(){if(!auth){$("#login").classList.remove("hidden");$("#app").classList.add("hidden")}}
 socket.on("state",render);socket.on("state",showSubmitted);socket.on("state",decorateTeams);socket.on("state",addVisitorOption);socket.on("state",fixNominatorCopy);socket.on("state",enforceTeamEntry);socket.on("connect",()=>{if(auth)socket.emit("identify",auth)});
 
-fetch("/api/state").then(r=>r.json()).then(render).catch(()=>{});
+fetch("/api/state").then(r=>r.json()).then(s=>{render(s);if(s&&!auth){$("#login").classList.remove("hidden");$("#app").classList.add("hidden")}}).catch(()=>{});
