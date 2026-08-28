@@ -2,6 +2,8 @@
 
 A real-time sealed-bid fantasy football auction built with Node, TypeScript, Express, and Socket.IO.
 
+Each nomination opens one 10-second sealed-bidding window for the entire league.
+
 ## Run locally
 
 ```bash

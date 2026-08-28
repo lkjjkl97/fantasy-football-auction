@@ -80,7 +80,7 @@ app.post("/api/nominate", (req, res) => {
   if (manager.roster.length >= 20) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
-    deadline: new Date(openedAt.getTime() + league.managers.length * 10000).toISOString(),
+    deadline: new Date(openedAt.getTime() + 10000).toISOString(),
     bids: [{ managerId: manager.id, amount: openingBid, submittedAt: openedAt.toISOString() }] };
   saveLeague();
   broadcast(); res.json({ ok: true });
@@ -90,8 +90,11 @@ app.post("/api/bid", (req, res) => {
   if (!league || !m || !league.current) return res.status(401).json({ error: "Choose a team and wait for an active auction." });
   if (Date.now() > Date.parse(league.current.deadline)) return res.status(400).json({ error: "Bidding has closed." });
   const passed = !!req.body.passed;
+  if (passed && m.id === league.current.nominatorId) return res.status(400).json({ error: "The nominator's opening bid cannot be withdrawn." });
   const amount = Number(req.body.amount);
   if (!passed && (!Number.isInteger(amount) || amount < league.current.openingBid || amount > maxBid(m))) return res.status(400).json({ error: `Your bid must be $${league.current.openingBid}–$${maxBid(m)}.` });
+  const existing = league.current.bids.find(b => b.managerId === m.id && !b.passed);
+  if (m.id === league.current.nominatorId && existing && !passed && amount <= existing.amount) return res.status(400).json({ error: `As nominator, your new bid must be higher than $${existing.amount}.` });
   league.current.bids = league.current.bids.filter(b => b.managerId !== m.id);
   league.current.bids.push({ managerId: m.id, amount: passed ? 0 : amount, passed, submittedAt: new Date().toISOString() });
   saveLeague();
