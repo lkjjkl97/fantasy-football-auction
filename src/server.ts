@@ -52,6 +52,18 @@ const publicState = (viewerId?: string) => league && ({
   results: league.results
 });
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
+let revealTimer: NodeJS.Timeout | null = null;
+function scheduleReveal() {
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = null;
+  const deadline = league?.current?.deadline;
+  if (!deadline) return;
+  revealTimer = setTimeout(() => {
+    if (!league?.current || league.current.deadline !== deadline) return;
+    try { resolveAuction(league); saveLeague(); broadcast(); }
+    catch (error) { console.error("Automatic reveal failed:", error); }
+  }, Math.max(0, Date.parse(deadline) - Date.now()));
+}
 const findManager = (managerId: string) => league?.managers.find((m) => m.id === managerId);
 
 app.get("/api/state", (req, res) => res.json(publicState(String(req.query.viewer || ""))));
@@ -84,6 +96,7 @@ app.post("/api/nominate", (req, res) => {
     deadline: new Date(openedAt.getTime() + 20000).toISOString(),
     bids: [{ managerId: manager.id, amount: openingBid, submittedAt: openedAt.toISOString() }] };
   saveLeague();
+  scheduleReveal();
   broadcast(); res.json({ ok: true });
 });
 app.post("/api/bid", (req, res) => {
@@ -111,6 +124,8 @@ app.post("/api/reset", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
   league.current = null;
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = null;
   league.results = [];
   league.nominationIndex = 0;
   league.tieOrder = [...league.nominationOrder].reverse();
@@ -133,4 +148,5 @@ io.on("connection", (socket) => {
   socket.on("identify", ({ managerId }) => { if (findManager(managerId)) socket.data.managerId = managerId; socket.emit("state", publicState(socket.data.managerId)); });
   socket.emit("state", publicState());
 });
+scheduleReveal();
 http.listen(port, "0.0.0.0", () => console.log(`Sealed Bid Draft running at http://localhost:${port}`));
