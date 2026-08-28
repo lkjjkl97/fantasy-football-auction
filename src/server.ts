@@ -45,7 +45,7 @@ const publicState = (viewerId?: string) => league && ({
   tieOrder: league.tieOrder,
   nominationIndex: league.nominationIndex,
   current: league.current && { player: league.current.player, nominatorId: league.current.nominatorId, openingBid: league.current.openingBid,
-    openedAt: league.current.openedAt, deadline: league.current.deadline,
+    openedAt: league.current.openedAt, deadline: league.current.deadline, paused: league.current.paused,
     responses: league.managers.map(m => ({managerId:m.id,submitted:league!.current!.bids.some(b=>b.managerId===m.id)})),
     myBid: league.current.bids.find(b => b.managerId === viewerId)?.amount,
     myPassed: league.current.bids.find(b => b.managerId === viewerId)?.passed },
@@ -106,6 +106,7 @@ app.post("/api/nominate", (req, res) => {
 app.post("/api/bid", (req, res) => {
   const m = findManager(String(req.body.managerId));
   if (!league || !m || !league.current) return res.status(401).json({ error: "Choose a team and wait for an active auction." });
+  if (league.current.paused) return res.status(400).json({ error: "Bidding is paused by the commissioner." });
   if (Date.now() > Date.parse(league.current.deadline)) return res.status(400).json({ error: "Bidding has closed." });
   const passed = !!req.body.passed;
   if (passed && m.id === league.current.nominatorId) return res.status(400).json({ error: "The nominator's opening bid cannot be withdrawn." });
@@ -135,6 +136,14 @@ app.post("/api/reset", (req, res) => {
   league.nominationIndex = 0;
   league.tieOrder = [...league.nominationOrder].reverse();
   saveLeague(); broadcast(); res.json({ ok: true });
+});
+app.post("/api/pause", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  if (!league.current) return res.status(400).json({ error: "No active bidding session." });
+  league.current.paused = !league.current.paused;
+  if (league.current.paused && revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+  else if (!league.current.paused) scheduleReveal();
+  saveLeague(); broadcast(); res.json({ paused: league.current.paused });
 });
 app.post("/api/manager-adjust", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });

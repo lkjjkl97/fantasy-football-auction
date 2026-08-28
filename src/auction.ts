@@ -1,6 +1,6 @@
 export type Manager = { id: string; name: string; budget: number; roster: string[]; rosterSlotsUsed: number };
 export type Bid = { managerId: string; amount: number; submittedAt: string; passed?: boolean };
-export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string };
+export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
 export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[] };
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[] };
 export const maxBid = (m: Manager) => m.budget - Math.max(0, 20 - m.rosterSlotsUsed - 1);
