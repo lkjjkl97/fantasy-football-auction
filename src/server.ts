@@ -82,6 +82,10 @@ app.post("/api/login", (req, res) => {
   if (!m) return res.status(401).json({ error: "Choose a team." });
   res.json({ managerId: m.id, state: publicState(m.id) });
 });
+app.post("/api/commissioner-check", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Invalid commissioner PIN" });
+  res.json({ ok: true });
+});
 app.post("/api/nominate", (req, res) => {
   if (!league) return res.status(404).json({ error: "League not found." });
   if (league.current) return res.status(409).json({ error: "Resolve the current auction first." });
@@ -106,7 +110,8 @@ app.post("/api/bid", (req, res) => {
   const passed = !!req.body.passed;
   if (passed && m.id === league.current.nominatorId) return res.status(400).json({ error: "The nominator's opening bid cannot be withdrawn." });
   const amount = Number(req.body.amount);
-  if (!passed && (!Number.isInteger(amount) || amount < league.current.openingBid || amount > maxBid(m))) return res.status(400).json({ error: `Your bid must be $${league.current.openingBid}–$${maxBid(m)}.` });
+  const minimumBid = m.id === league.current.nominatorId ? league.current.openingBid : league.current.openingBid + 1;
+  if (!passed && (!Number.isInteger(amount) || amount < minimumBid || amount > maxBid(m))) return res.status(400).json({ error: `Your bid must be $${minimumBid}–$${maxBid(m)}.` });
   const existing = league.current.bids.find(b => b.managerId === m.id && !b.passed);
   if (m.id === league.current.nominatorId && existing && !passed && amount <= existing.amount) return res.status(400).json({ error: `As nominator, your new bid must be higher than $${existing.amount}.` });
   league.current.bids = league.current.bids.filter(b => b.managerId !== m.id);

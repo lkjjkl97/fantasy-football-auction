@@ -1,6 +1,6 @@
 .recovery{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
 .recovery .formrow label{flex:1}
 @media(max-width:700px){.recovery .formrow{align-items:stretch}}
-.submitted-bid{width:100%;margin:0;color:var(--lime);font-weight:800}
-.team-pill{position:relative}.order-number{font-size:10px;letter-spacing:.12em;color:var(--lime);font-weight:900}
+.submitted-bid{width:100%;margin:0;color:var(--lime);font-weight:900;font-size:22px;letter-spacing:.01em}
+.team-pill{position:relative}.team-pill span{grid-column:1/-1;font-size:19px}.order-number{display:none}
 .team-pill.on-clock{border-color:var(--lime);box-shadow:inset 0 0 0 1px var(--lime)}
