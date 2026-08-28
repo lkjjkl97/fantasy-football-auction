@@ -8,3 +8,5 @@
 @media(max-width:700px){.pin-check{flex-wrap:wrap}.pin-check label{width:100%}.pin-check button{width:100%}.team-pill{max-width:none;flex-basis:calc(50% - 8px)}}
 @media(max-width:700px){main{padding-left:10px;padding-right:10px}.card{padding:16px}header{padding-left:10px;padding-right:10px}}
 main,.card{min-width:0;max-width:100%;overflow-x:hidden}.team-strip{width:100%;min-width:0}
+.team-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.team-pill{min-width:0;max-width:none}.team-pill strong,.team-pill span,.team-pill small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:700px){.team-strip{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}.team-pill{padding:8px 6px}.team-pill strong{font-size:12px}.team-pill span{font-size:14px}.team-pill small{font-size:9px}}
