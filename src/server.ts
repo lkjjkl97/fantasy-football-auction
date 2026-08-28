@@ -18,6 +18,7 @@ function loadLeague(): League | null {
   try {
     const saved = JSON.parse(readFileSync(stateFile, "utf8")) as League;
     saved.nominationIndex ??= 0;
+    saved.managers.forEach((manager) => { manager.rosterSlotsUsed ??= manager.roster.length; });
     if (saved.current && !(saved.current as { deadline?: string }).deadline) saved.current = null;
     return saved;
   }
@@ -39,7 +40,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 const publicState = (viewerId?: string) => league && ({
-  managers: league.managers.map((m) => ({ ...m, maxBid: maxBid(m) })),
+  managers: league.managers.map((m) => ({ ...m, rosterSpotsLeft: 20 - m.rosterSlotsUsed, maxBid: maxBid(m) })),
   nominationOrder: league.nominationOrder,
   tieOrder: league.tieOrder,
   nominationIndex: league.nominationIndex,
@@ -58,7 +59,7 @@ app.post("/api/setup", (req, res) => {
   if (league) return res.status(409).json({ error: "League is already set up." });
   const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({ name: z.string().min(1).max(30) })).min(2).max(20) }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Use 2–20 team names and a commissioner PIN of at least 4 characters." });
-  const managers = parsed.data.managers.map((m) => ({ id: randomUUID(), ...m, budget: 300, roster: [] as string[] }));
+  const managers = parsed.data.managers.map((m) => ({ id: randomUUID(), ...m, budget: 300, roster: [] as string[], rosterSlotsUsed: 0 }));
   const nominationOrder = managers.map((m) => m.id);
   league = { commissionerPin: parsed.data.commissionerPin, managers, nominationOrder, tieOrder: [...nominationOrder].reverse(), nominationIndex: 0, current: null, results: [] };
   saveLeague();
@@ -77,7 +78,7 @@ app.post("/api/nominate", (req, res) => {
   const openingBid = Number(req.body.openingBid);
   if (!manager || manager.id !== league.nominationOrder[league.nominationIndex]) return res.status(403).json({ error: "It is not your turn to nominate." });
   if (!player || !Number.isInteger(openingBid) || openingBid < 1 || openingBid > maxBid(manager)) return res.status(400).json({ error: `Enter a player and an opening bid from $1–$${maxBid(manager)}.` });
-  if (manager.roster.length >= 20) return res.status(400).json({ error: "That manager's roster is full." });
+  if (manager.rosterSlotsUsed >= 20) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
     deadline: new Date(openedAt.getTime() + 20000).toISOString(),
@@ -108,11 +109,23 @@ app.post("/api/resolve", (req, res) => {
 });
 app.post("/api/reset", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
-  league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; });
+  league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
   league.current = null;
   league.results = [];
   league.nominationIndex = 0;
   league.tieOrder = [...league.nominationOrder].reverse();
+  saveLeague(); broadcast(); res.json({ ok: true });
+});
+app.post("/api/manager-adjust", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  const manager = league.managers.find((m) => m.id === String(req.body.managerId));
+  const budget = Number(req.body.budget);
+  const rosterSpotsLeft = Number(req.body.rosterSpotsLeft);
+  if (!manager || !Number.isInteger(budget) || budget < 0 || budget > 300 || !Number.isInteger(rosterSpotsLeft) || rosterSpotsLeft < 0 || rosterSpotsLeft > 20) return res.status(400).json({ error: "Enter $0–$300 and 0–20 roster spots left." });
+  if (budget < rosterSpotsLeft) return res.status(400).json({ error: `A team with ${rosterSpotsLeft} spots left must retain at least $${rosterSpotsLeft}.` });
+  manager.budget = budget;
+  manager.rosterSlotsUsed = 20 - rosterSpotsLeft;
+  if (manager.roster.length > manager.rosterSlotsUsed) manager.roster = manager.roster.slice(0, manager.rosterSlotsUsed);
   saveLeague(); broadcast(); res.json({ ok: true });
 });
 

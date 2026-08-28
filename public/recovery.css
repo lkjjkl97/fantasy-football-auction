@@ -1,0 +1,3 @@
+.recovery{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+.recovery .formrow label{flex:1}
+@media(max-width:700px){.recovery .formrow{align-items:stretch}}
