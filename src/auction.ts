@@ -15,6 +15,6 @@ export function resolveAuction(l: League): Result {
   const winner=l.managers.find(m=>m.id===winnerId)!;winner.budget-=amount;winner.roster.push(c.player);
   winner.rosterSlotsUsed += 1;
   if(tied.length>1&&winnerId!==c.nominatorId)l.tieOrder=l.tieOrder.filter(id=>id!==winnerId).concat(winnerId);
-  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:[...c.bids].sort((a,b)=>Number(a.passed)-Number(b.passed)||b.amount-a.amount)};
+  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:[...c.bids].sort((a,b)=>Number(a.passed)-Number(b.passed)||b.amount-a.amount||(a.managerId===winnerId?-1:b.managerId===winnerId?1:0))};
   l.results.unshift(result);l.current=null;l.nominationIndex=(l.nominationIndex+1)%l.managers.length;return result;
 }
