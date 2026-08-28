@@ -1,4 +1,4 @@
-export type Manager = { id: string; name: string; budget: number; roster: string[]; rosterSlotsUsed: number };
+export type Manager = { id: string; name: string; pinHash?: string; budget: number; roster: string[]; rosterSlotsUsed: number };
 export type Bid = { managerId: string; amount: number; submittedAt: string; passed?: boolean };
 export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
 export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[] };

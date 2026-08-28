@@ -1,6 +1,6 @@
 import express from "express";
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { Server } from "socket.io";
@@ -13,6 +13,9 @@ const io = new Server(http);
 const port = Number(process.env.PORT || 3000);
 const stateFile = process.env.STATE_FILE || "data/league.json";
 let league: League | null = loadLeague();
+const sessions = new Map<string, string>();
+const hashPin = (pin: string) => createHash("sha256").update(pin).digest("hex");
+const sessionManager = (token: unknown) => findManager(sessions.get(String(token)) || "");
 
 function loadLeague(): League | null {
   try {
@@ -40,7 +43,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 const publicState = (viewerId?: string) => league && ({
-  managers: league.managers.map((m) => ({ ...m, rosterSpotsLeft: 20 - m.rosterSlotsUsed, maxBid: maxBid(m) })),
+  managers: league.managers.map((m) => ({ id: m.id, name: m.name, budget: m.budget, roster: m.roster, rosterSlotsUsed: m.rosterSlotsUsed, rosterSpotsLeft: 20 - m.rosterSlotsUsed, maxBid: maxBid(m) })),
   nominationOrder: league.nominationOrder,
   tieOrder: league.tieOrder,
   nominationIndex: league.nominationIndex,
@@ -49,8 +52,8 @@ const publicState = (viewerId?: string) => league && ({
     responses: league.managers.map(m => ({managerId:m.id,submitted:league!.current!.bids.some(b=>b.managerId===m.id)})),
     myBid: league.current.bids.find(b => b.managerId === viewerId)?.amount,
     myPassed: league.current.bids.find(b => b.managerId === viewerId)?.passed },
-  results: league.results
-  ,ended: league.ended
+  results: league.results,
+  ended: league.ended
 });
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
 let revealTimer: NodeJS.Timeout | null = null;
@@ -70,9 +73,10 @@ const findManager = (managerId: string) => league?.managers.find((m) => m.id ===
 app.get("/api/state", (req, res) => res.json(publicState(String(req.query.viewer || ""))));
 app.post("/api/setup", (req, res) => {
   if (league) return res.status(409).json({ error: "League is already set up." });
-  const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({ name: z.string().min(1).max(30) })).min(2).max(20) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 team names and a commissioner PIN of at least 4 characters." });
-  const managers = parsed.data.managers.map((m) => ({ id: randomUUID(), ...m, budget: 300, roster: [] as string[], rosterSlotsUsed: 0 }));
+  const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({ name: z.string().min(1).max(30), pin: z.string().min(4).max(30) })).min(2).max(20) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 team names, unique team PINs, and a commissioner PIN of at least 4 characters." });
+  if (new Set(parsed.data.managers.map((m) => m.pin)).size !== parsed.data.managers.length) return res.status(400).json({ error: "Every team needs a unique PIN." });
+  const managers = parsed.data.managers.map(({ name, pin }) => ({ id: randomUUID(), name, pinHash: hashPin(pin), budget: 300, roster: [] as string[], rosterSlotsUsed: 0 }));
   const nominationOrder = managers.map((m) => m.id);
   league = { commissionerPin: parsed.data.commissionerPin, managers, nominationOrder, tieOrder: [...nominationOrder].reverse(), nominationIndex: 0, current: null, results: [] };
   saveLeague();
@@ -80,8 +84,10 @@ app.post("/api/setup", (req, res) => {
 });
 app.post("/api/login", (req, res) => {
   const m = findManager(String(req.body.managerId));
-  if (!m) return res.status(401).json({ error: "Choose a team." });
-  res.json({ managerId: m.id, state: publicState(m.id) });
+  if (!m || m.pinHash !== hashPin(String(req.body.pin || ""))) return res.status(401).json({ error: "Team or PIN is incorrect." });
+  const token = randomUUID();
+  sessions.set(token, m.id);
+  res.json({ managerId: m.id, token, state: publicState(m.id) });
 });
 app.post("/api/commissioner-check", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Invalid commissioner PIN" });
@@ -91,7 +97,7 @@ app.post("/api/nominate", (req, res) => {
   if (!league) return res.status(404).json({ error: "League not found." });
   if (league.ended) return res.status(400).json({ error: "This league has ended." });
   if (league.current) return res.status(409).json({ error: "Resolve the current auction first." });
-  const manager = findManager(String(req.body.managerId));
+  const manager = sessionManager(req.body.token);
   const player = String(req.body.player || "").trim();
   const openingBid = Number(req.body.openingBid);
   if (!manager || manager.id !== league.nominationOrder[league.nominationIndex]) return res.status(403).json({ error: "It is not your turn to nominate." });
@@ -106,7 +112,7 @@ app.post("/api/nominate", (req, res) => {
   broadcast(); res.json({ ok: true });
 });
 app.post("/api/bid", (req, res) => {
-  const m = findManager(String(req.body.managerId));
+  const m = sessionManager(req.body.token);
   if (!league || !m || !league.current) return res.status(401).json({ error: "Choose a team and wait for an active auction." });
   if (league.current.paused) return res.status(400).json({ error: "Bidding is paused by the commissioner." });
   if (Date.now() > Date.parse(league.current.deadline)) return res.status(400).json({ error: "Bidding has closed." });
@@ -131,6 +137,7 @@ app.post("/api/resolve", (req, res) => {
 app.post("/api/reset", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
+  sessions.clear();
   league.current = null;
   if (revealTimer) clearTimeout(revealTimer);
   revealTimer = null;
@@ -143,10 +150,11 @@ app.post("/api/reset", (req, res) => {
 app.post("/api/end", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   league = null;
+  sessions.clear();
   try { unlinkSync(stateFile); } catch {}
   if (revealTimer) clearTimeout(revealTimer);
   revealTimer = null;
-  saveLeague(); broadcast(); res.json({ ok: true });
+  broadcast(); res.json({ ok: true });
 });
 app.post("/api/pause", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
@@ -170,7 +178,7 @@ app.post("/api/manager-adjust", (req, res) => {
 });
 
 io.on("connection", (socket) => {
-  socket.on("identify", ({ managerId }) => { if (findManager(managerId)) socket.data.managerId = managerId; socket.emit("state", publicState(socket.data.managerId)); });
+  socket.on("identify", ({ token }) => { const manager = sessionManager(token); if (manager) socket.data.managerId = manager.id; socket.emit("state", publicState(socket.data.managerId)); });
   socket.emit("state", publicState());
 });
 scheduleReveal();
