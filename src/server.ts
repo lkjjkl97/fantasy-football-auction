@@ -80,7 +80,7 @@ app.post("/api/nominate", (req, res) => {
   if (manager.roster.length >= 20) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
-    deadline: new Date(openedAt.getTime() + 10000).toISOString(),
+    deadline: new Date(openedAt.getTime() + 20000).toISOString(),
     bids: [{ managerId: manager.id, amount: openingBid, submittedAt: openedAt.toISOString() }] };
   saveLeague();
   broadcast(); res.json({ ok: true });
@@ -105,6 +105,15 @@ app.post("/api/resolve", (req, res) => {
   if (!canReveal(league)) return res.status(400).json({ error: "Wait for every team to respond or for the timer to expire." });
   try { const result = resolveAuction(league); saveLeague(); broadcast(); res.json(result); }
   catch (e) { res.status(400).json({ error: (e as Error).message }); }
+});
+app.post("/api/reset", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; });
+  league.current = null;
+  league.results = [];
+  league.nominationIndex = 0;
+  league.tieOrder = [...league.nominationOrder].reverse();
+  saveLeague(); broadcast(); res.json({ ok: true });
 });
 
 io.on("connection", (socket) => {
