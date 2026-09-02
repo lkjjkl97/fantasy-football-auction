@@ -6,6 +6,7 @@ import { dirname } from "node:path";
 import { Server } from "socket.io";
 import { z } from "zod";
 import { canReveal, maxBid, resolveAuction, type League } from "./auction.js";
+import { buildPublicState } from "./state.js";
 
 const app = express();
 const http = createServer(app);
@@ -41,20 +42,9 @@ function saveLeague() {
 
 app.use(express.json());
 app.use(express.static("public"));
+app.use("/api", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
-const publicState = (viewerId?: string) => league && ({
-  managers: league.managers.map((m) => ({ id: m.id, name: m.name, budget: m.budget, roster: m.roster, rosterSlotsUsed: m.rosterSlotsUsed, rosterSpotsLeft: 20 - m.rosterSlotsUsed, maxBid: maxBid(m) })),
-  nominationOrder: league.nominationOrder,
-  tieOrder: league.tieOrder,
-  nominationIndex: league.nominationIndex,
-  current: league.current && { player: league.current.player, nominatorId: league.current.nominatorId, openingBid: league.current.openingBid,
-    openedAt: league.current.openedAt, deadline: league.current.deadline, paused: league.current.paused,
-    responses: league.managers.map(m => ({managerId:m.id,submitted:league!.current!.bids.some(b=>b.managerId===m.id)})),
-    myBid: league.current.bids.find(b => b.managerId === viewerId)?.amount,
-    myPassed: league.current.bids.find(b => b.managerId === viewerId)?.passed },
-  results: league.results,
-  ended: league.ended
-});
+const publicState = (viewerId?: string) => buildPublicState(league, viewerId);
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
 let revealTimer: NodeJS.Timeout | null = null;
 function scheduleReveal() {
@@ -70,7 +60,7 @@ function scheduleReveal() {
 }
 const findManager = (managerId: string) => league?.managers.find((m) => m.id === managerId);
 
-app.get("/api/state", (req, res) => res.json(publicState(String(req.query.viewer || ""))));
+app.get("/api/state", (_req, res) => res.json(publicState()));
 app.post("/api/setup", (req, res) => {
   if (league) return res.status(409).json({ error: "League is already set up." });
   const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({ name: z.string().min(1).max(30), pin: z.string().min(4).max(30) })).min(2).max(20) }).safeParse(req.body);
