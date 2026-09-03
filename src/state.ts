@@ -9,6 +9,7 @@ export function buildPublicState(league: League | null, viewerId?: string) {
     openedAt: league.current.openedAt,
     deadline: league.current.deadline,
     paused: league.current.paused,
+    pausedRemainingMs: league.current.pausedRemainingMs,
     responses: league.managers.map((manager) => ({
       managerId: manager.id,
       submitted: league.current!.bids.some((bid) => bid.managerId === manager.id),

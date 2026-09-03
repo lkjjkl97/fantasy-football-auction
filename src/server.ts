@@ -94,7 +94,7 @@ function scheduleReveal() {
   if (revealTimer) clearTimeout(revealTimer);
   revealTimer = null;
   const deadline = league?.current?.deadline;
-  if (!deadline) return;
+  if (!deadline || league?.current?.paused) return;
   revealTimer = setTimeout(() => {
     if (!league?.current || league.current.deadline !== deadline) return;
     try { resolveAuction(league); saveLeague(); broadcast(); }
@@ -228,10 +228,27 @@ app.post("/api/end", (req, res) => {
 app.post("/api/pause", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   if (!league.current) return res.status(400).json({ error: "No active bidding session." });
-  league.current.paused = !league.current.paused;
-  if (league.current.paused && revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
-  else if (!league.current.paused) scheduleReveal();
+  if (!league.current.paused) {
+    league.current.pausedRemainingMs = Math.max(0, Date.parse(league.current.deadline) - Date.now());
+    league.current.paused = true;
+    if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+  }
+  else {
+    const remaining = Math.max(0, league.current.pausedRemainingMs ?? 0);
+    league.current.deadline = new Date(Date.now() + remaining).toISOString();
+    league.current.paused = false;
+    delete league.current.pausedRemainingMs;
+    scheduleReveal();
+  }
   saveLeague(); broadcast(); res.json({ paused: league.current.paused });
+});
+app.post("/api/reset-timer", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  if (!league.current) return res.status(400).json({ error: "No active bidding session." });
+  league.current.deadline = new Date(Date.now() + 20000).toISOString();
+  if (league.current.paused) league.current.pausedRemainingMs = 20000;
+  else scheduleReveal();
+  saveLeague(); broadcast(); res.json({ ok: true, paused: !!league.current.paused });
 });
 app.post("/api/manager-adjust", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
