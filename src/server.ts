@@ -78,6 +78,14 @@ const publicState = (viewerId?: string) => {
   return state && { ...state, presence: Object.fromEntries(state.managers.map((manager) => [manager.id, presence.get(manager.id) ?? "disconnected"])) };
 };
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
+function invalidateAuthenticatedSockets() {
+  io.sockets.sockets.forEach((socket) => {
+    if (!socket.data.managerId) return;
+    socket.data.managerId = undefined;
+    socket.emit("session-invalid");
+    socket.emit("state", publicState());
+  });
+}
 function managerConnected(managerId: string) {
   const timer = presenceTimers.get(managerId); if (timer) clearTimeout(timer);
   presenceTimers.delete(managerId); presence.set(managerId, "live"); broadcast();
@@ -187,6 +195,7 @@ app.post("/api/reset", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   league.managers.forEach((manager) => { manager.budget = manager.startingBudget ?? 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
   sessions.clear();
+  invalidateAuthenticatedSockets();
   league.current = null;
   if (revealTimer) clearTimeout(revealTimer);
   revealTimer = null;
@@ -214,6 +223,7 @@ app.post("/api/backup/restore", (req, res) => {
     if (req.body.commissionerPin !== expectedPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
     league = restored;
     sessions.clear();
+    invalidateAuthenticatedSockets();
     if (revealTimer) clearTimeout(revealTimer);
     revealTimer = null;
     saveLeague(); scheduleReveal(); broadcast();
