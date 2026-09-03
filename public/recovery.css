@@ -1,6 +1,7 @@
 .recovery{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
 .recovery .formrow label{flex:1}
 .submitted-bid{width:100%;margin:0;color:var(--lime);font-size:22px;font-weight:900;letter-spacing:.01em}
+button:disabled,input:disabled{opacity:.5;cursor:not-allowed}
 .pin-check{display:flex;align-items:end;gap:10px}
 .pin-check label{width:160px}
 .pin-check button{white-space:nowrap}
