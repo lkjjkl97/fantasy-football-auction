@@ -12,7 +12,8 @@ main,#app,.card,.live{min-width:0;max-width:100%}
 .team-pill small{color:var(--muted);font-size:10px}
 .team-pill.on-clock{border-color:var(--lime);box-shadow:inset 0 0 0 1px var(--lime)}
 .order-number{display:none}
-.manager-headings,.manager-input{display:grid;grid-template-columns:35px minmax(120px,1fr) minmax(90px,.7fr) 90px 90px auto;gap:10px;align-items:center}
+.league-settings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.manager-headings,.manager-input{display:grid;grid-template-columns:35px minmax(120px,1fr) minmax(90px,.7fr) auto;gap:10px;align-items:center}
 .manager-headings{color:var(--muted);font-size:10px;font-weight:800;margin-bottom:-5px}
 .priority{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:visible}
 .priority li{min-width:0}
@@ -37,9 +38,7 @@ main,#app,.card,.live{min-width:0;max-width:100%}
   .pin-check{flex-wrap:wrap}
   .pin-check label,.pin-check button{width:100%}
   .manager-headings{display:none}
-  .manager-input{grid-template-columns:30px repeat(2,minmax(0,1fr))}
-  .manager-input .newName,.manager-input .newPin{grid-column:2/4}
-  .manager-input .newBudget{grid-column:2}
-  .manager-input .newRosterLimit{grid-column:3}
-  .manager-input button{grid-column:2/4}
+  .league-settings{grid-template-columns:1fr}
+  .manager-input{grid-template-columns:30px minmax(0,1fr)}
+  .manager-input .newName,.manager-input .newPin,.manager-input button{grid-column:2}
 }

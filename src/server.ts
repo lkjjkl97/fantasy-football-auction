@@ -67,13 +67,16 @@ const findManager = (managerId: string) => league?.managers.find((m) => m.id ===
 app.get("/api/state", (_req, res) => res.json(publicState()));
 app.post("/api/setup", (req, res) => {
   if (league) return res.status(409).json({ error: "League is already set up." });
-  const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({
-    name: z.string().min(1).max(30), pin: z.string().min(4).max(30),
-    startingBudget: z.number().int().min(1).max(10000), rosterLimit: z.number().int().min(1).max(100)
-  }).refine((manager) => manager.startingBudget >= manager.rosterLimit)).min(2).max(20) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 teams. Each needs a name, unique PIN, $1–$10,000 budget, and 1–100 roster spots. Budget must be at least the roster size." });
+  const parsed = z.object({
+    commissionerPin: z.string().min(4),
+    startingBudget: z.number().int().min(1).max(10000),
+    rosterLimit: z.number().int().min(1).max(100),
+    managers: z.array(z.object({ name: z.string().min(1).max(30), pin: z.string().min(4).max(30) })).min(2).max(20)
+  }).refine((settings) => settings.startingBudget >= settings.rosterLimit).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 teams with names and unique PINs. Starting dollars must be $1–$10,000, roster size must be 1–100, and the budget must cover $1 per roster spot." });
   if (new Set(parsed.data.managers.map((m) => m.pin)).size !== parsed.data.managers.length) return res.status(400).json({ error: "Every team needs a unique PIN." });
-  const managers = parsed.data.managers.map(({ name, pin, startingBudget, rosterLimit }) => ({ id: randomUUID(), name, pinHash: hashPin(pin), budget: startingBudget, startingBudget, rosterLimit, roster: [] as string[], rosterSlotsUsed: 0 }));
+  const { startingBudget, rosterLimit } = parsed.data;
+  const managers = parsed.data.managers.map(({ name, pin }) => ({ id: randomUUID(), name, pinHash: hashPin(pin), budget: startingBudget, startingBudget, rosterLimit, roster: [] as string[], rosterSlotsUsed: 0 }));
   const nominationOrder = managers.map((m) => m.id);
   league = { commissionerPin: parsed.data.commissionerPin, managers, nominationOrder, tieOrder: [...nominationOrder].reverse(), nominationIndex: 0, current: null, results: [] };
   saveLeague();
