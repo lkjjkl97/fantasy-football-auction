@@ -1,7 +1,7 @@
 export type Manager = { id: string; name: string; pinHash?: string; budget: number; startingBudget?: number; rosterLimit?: number; roster: string[]; rosterSlotsUsed: number };
 export type Bid = { managerId: string; amount: number; submittedAt: string; passed?: boolean };
 export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
-export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[]; nominatorId?: string; nominationIndexBefore?: number; tieOrderBefore?: string[] };
+export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[]; nominationNumber?: number; nominatorId?: string; nominationIndexBefore?: number; tieOrderBefore?: string[] };
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[]; ended?: boolean };
 export const hasRosterSpace = (m: Manager) => m.rosterSlotsUsed < (m.rosterLimit ?? 20);
 export const maxBid = (m: Manager) => hasRosterSpace(m) ? m.budget - Math.max(0, (m.rosterLimit ?? 20) - m.rosterSlotsUsed - 1) : 0;
@@ -27,7 +27,7 @@ export function resolveAuction(l: League): Result {
   if(tied.length>1&&winnerId!==c.nominatorId)l.tieOrder=l.tieOrder.filter(id=>id!==winnerId).concat(winnerId);
   const tieRank=(managerId:string)=>managerId===c.nominatorId?-1:priorityBefore.indexOf(managerId);
   const revealedBids=[...c.bids].sort((a,b)=>Number(a.passed)-Number(b.passed)||b.amount-a.amount||tieRank(a.managerId)-tieRank(b.managerId));
-  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:revealedBids,nominatorId:c.nominatorId,nominationIndexBefore:l.nominationIndex,tieOrderBefore:priorityBefore};
+  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:revealedBids,nominationNumber:l.results.length+1,nominatorId:c.nominatorId,nominationIndexBefore:l.nominationIndex,tieOrderBefore:priorityBefore};
   l.results.unshift(result);l.current=null;const nextIndex=nextNominationIndex(l,l.nominationIndex);if(nextIndex<0)l.ended=true;else l.nominationIndex=nextIndex;return result;
 }
 export function undoLastResult(l: League): Result {

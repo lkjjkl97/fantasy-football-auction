@@ -36,13 +36,14 @@ export function buildPublicState(league: League | null, viewerId?: string) {
     tieOrder: league.tieOrder,
     nominationIndex: league.nominationIndex,
     current,
-    results: league.results.map((result) => ({
+    results: league.results.map((result, index) => ({
       player: result.player,
       winnerId: result.winnerId,
       amount: result.amount,
       winningBid: result.winningBid,
       tied: result.tied,
-      bids: result.bids
+      bids: result.bids,
+      nominationNumber: result.nominationNumber ?? league.results.length - index
     })),
     ended: league.ended
   };
