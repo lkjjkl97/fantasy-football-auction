@@ -1,8 +1,8 @@
 import express from "express";
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync, unlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { Server } from "socket.io";
 import { z } from "zod";
 import { canReveal, hasRosterSpace, maxBid, nextNominationIndex, resolveAuction, undoLastResult, type League } from "./auction.js";
@@ -13,6 +13,8 @@ const http = createServer(app);
 const io = new Server(http);
 const port = Number(process.env.PORT || 3000);
 const stateFile = process.env.STATE_FILE || "data/league.json";
+const backupDirectory = process.env.BACKUP_DIR || join(dirname(stateFile), "backups");
+const maxBackups = 200;
 let league: League | null = loadLeague();
 const sessions = new Map<string, string>();
 const hashPin = (pin: string) => createHash("sha256").update(pin).digest("hex");
@@ -40,11 +42,32 @@ function saveLeague() {
   if (!league) return;
   mkdirSync(dirname(stateFile), { recursive: true });
   const temporary = `${stateFile}.tmp`;
-  writeFileSync(temporary, JSON.stringify(league, null, 2));
+  const serialized = JSON.stringify(league, null, 2);
+  writeFileSync(temporary, serialized);
   renameSync(temporary, stateFile);
+  try {
+    mkdirSync(backupDirectory, { recursive: true });
+    writeFileSync(join(backupDirectory, `${Date.now()}-${randomUUID()}.json`), serialized);
+    const backups = readdirSync(backupDirectory).filter((file) => file.endsWith(".json")).sort();
+    backups.slice(0, Math.max(0, backups.length - maxBackups)).forEach((file) => unlinkSync(join(backupDirectory, file)));
+  }
+  catch (error) { console.error("Could not create league backup:", error); }
 }
 
-app.use(express.json());
+function normalizeLeague(candidate: unknown): League {
+  const parsed = z.object({
+    commissionerPin: z.string().min(4),
+    managers: z.array(z.object({ id: z.string(), name: z.string(), pinHash: z.string().optional(), budget: z.number(), startingBudget: z.number().optional(), rosterLimit: z.number().optional(), roster: z.array(z.string()), rosterSlotsUsed: z.number() })).min(2),
+    nominationOrder: z.array(z.string()).min(2), tieOrder: z.array(z.string()).min(2), nominationIndex: z.number().int().nonnegative(),
+    current: z.any().nullable(), results: z.array(z.any()), ended: z.boolean().optional()
+  }).parse(candidate) as League;
+  const ids = new Set(parsed.managers.map((manager) => manager.id));
+  if (parsed.nominationOrder.some((id) => !ids.has(id)) || parsed.tieOrder.some((id) => !ids.has(id))) throw Error("Backup contains an invalid team order.");
+  parsed.managers.forEach((manager) => { manager.startingBudget ??= 300; manager.rosterLimit ??= 20; });
+  return parsed;
+}
+
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 app.use("/api", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
@@ -156,6 +179,26 @@ app.post("/api/undo", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
   try { const result = undoLastResult(league); saveLeague(); broadcast(); res.json({ ok: true, player: result.player }); }
   catch (error) { res.status(400).json({ error: (error as Error).message }); }
+});
+app.post("/api/backup/download", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Content-Disposition", `attachment; filename="war-room-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json"`);
+  res.send(JSON.stringify(league, null, 2));
+});
+app.post("/api/backup/restore", (req, res) => {
+  try {
+    const restored = normalizeLeague(req.body.backup);
+    const expectedPin = league?.commissionerPin ?? restored.commissionerPin;
+    if (req.body.commissionerPin !== expectedPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+    league = restored;
+    sessions.clear();
+    if (revealTimer) clearTimeout(revealTimer);
+    revealTimer = null;
+    saveLeague(); scheduleReveal(); broadcast();
+    res.json({ ok: true });
+  }
+  catch (error) { res.status(400).json({ error: error instanceof z.ZodError ? "That file is not a valid War Room backup." : (error as Error).message }); }
 });
 app.post("/api/end", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
