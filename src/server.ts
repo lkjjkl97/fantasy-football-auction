@@ -166,7 +166,7 @@ app.post("/api/bid", (req, res) => {
   const minimumBid = m.id === league.current.nominatorId ? league.current.openingBid : league.current.openingBid + 1;
   if (!passed && (!Number.isInteger(amount) || amount < minimumBid || amount > maxBid(m))) return res.status(400).json({ error: `Your bid must be $${minimumBid}–$${maxBid(m)}.` });
   const existing = league.current.bids.find(b => b.managerId === m.id && !b.passed);
-  if (m.id === league.current.nominatorId && existing && !passed && amount <= existing.amount) return res.status(400).json({ error: `As nominator, your new bid must be higher than $${existing.amount}.` });
+  if (m.id === league.current.nominatorId && existing && !passed && amount < league.current.openingBid) return res.status(400).json({ error: `Your updated bid must be at least the opening bid of $${league.current.openingBid}.` });
   league.current.bids = league.current.bids.filter(b => b.managerId !== m.id);
   league.current.bids.push({ managerId: m.id, amount: passed ? 0 : amount, passed, submittedAt: new Date().toISOString() });
   saveLeague();
