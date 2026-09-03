@@ -36,7 +36,7 @@ main,#app,.card,.live{min-width:0;max-width:100%}
   .money-input,.money-input input{min-width:0;width:100%}
   .response-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
   .response{min-width:0}
-  .team-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .team-strip{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
   .priority{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
   .pin-check{flex-wrap:wrap}
   .history-title{align-items:stretch;flex-direction:column}.history-title label{width:100%}.history-item{padding:12px}
