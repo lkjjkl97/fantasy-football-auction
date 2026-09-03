@@ -87,15 +87,16 @@ app.post("/api/nominate", (req, res) => {
   if (!league) return res.status(404).json({ error: "League not found." });
   if (league.ended) return res.status(400).json({ error: "This league has ended." });
   if (league.current) return res.status(409).json({ error: "Resolve the current auction first." });
-  const manager = sessionManager(req.body.token);
+  if (req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  const manager = findManager(league.nominationOrder[league.nominationIndex]);
   const player = String(req.body.player || "").trim();
   const openingBid = Number(req.body.openingBid);
-  if (!manager || manager.id !== league.nominationOrder[league.nominationIndex]) return res.status(403).json({ error: "It is not your turn to nominate." });
+  if (!manager) return res.status(400).json({ error: "The next nominator could not be found." });
   if (!player || !Number.isInteger(openingBid) || openingBid < 1 || openingBid > maxBid(manager)) return res.status(400).json({ error: `Enter a player and an opening bid from $1–$${maxBid(manager)}.` });
   if (manager.rosterSlotsUsed >= 20) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
-    deadline: new Date(openedAt.getTime() + 30000).toISOString(),
+    deadline: new Date(openedAt.getTime() + 20000).toISOString(),
     bids: [{ managerId: manager.id, amount: openingBid, submittedAt: openedAt.toISOString() }] };
   saveLeague();
   scheduleReveal();
