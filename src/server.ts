@@ -71,8 +71,24 @@ app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 app.use("/api", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
-const publicState = (viewerId?: string) => buildPublicState(league, viewerId);
+const presence = new Map<string, "live" | "reconnecting" | "disconnected">();
+const presenceTimers = new Map<string, NodeJS.Timeout>();
+const publicState = (viewerId?: string) => {
+  const state = buildPublicState(league, viewerId);
+  return state && { ...state, presence: Object.fromEntries(state.managers.map((manager) => [manager.id, presence.get(manager.id) ?? "disconnected"])) };
+};
 const broadcast = () => io.sockets.sockets.forEach((s) => s.emit("state", publicState(s.data.managerId)));
+function managerConnected(managerId: string) {
+  const timer = presenceTimers.get(managerId); if (timer) clearTimeout(timer);
+  presenceTimers.delete(managerId); presence.set(managerId, "live"); broadcast();
+}
+function managerDisconnected(managerId: string, socketId: string) {
+  const stillConnected = [...io.sockets.sockets.values()].some((candidate) => candidate.id !== socketId && candidate.connected && candidate.data.managerId === managerId);
+  if (stillConnected) return;
+  presence.set(managerId, "reconnecting"); broadcast();
+  const previous = presenceTimers.get(managerId); if (previous) clearTimeout(previous);
+  presenceTimers.set(managerId, setTimeout(() => { presence.set(managerId, "disconnected"); presenceTimers.delete(managerId); broadcast(); }, 10000));
+}
 let revealTimer: NodeJS.Timeout | null = null;
 function scheduleReveal() {
   if (revealTimer) clearTimeout(revealTimer);
@@ -239,7 +255,8 @@ app.post("/api/manager-adjust", (req, res) => {
 });
 
 io.on("connection", (socket) => {
-  socket.on("identify", ({ token }) => { const manager = sessionManager(token); if (manager) socket.data.managerId = manager.id; socket.emit("state", publicState(socket.data.managerId)); });
+  socket.on("identify", ({ token }) => { const manager = sessionManager(token); if (manager) { socket.data.managerId = manager.id; managerConnected(manager.id); } socket.emit("state", publicState(socket.data.managerId)); });
+  socket.on("disconnect", () => { if (socket.data.managerId) managerDisconnected(socket.data.managerId, socket.id); });
   socket.emit("state", publicState());
 });
 scheduleReveal();
