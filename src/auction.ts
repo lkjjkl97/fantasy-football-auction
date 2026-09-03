@@ -1,7 +1,7 @@
 export type Manager = { id: string; name: string; pinHash?: string; budget: number; startingBudget?: number; rosterLimit?: number; roster: string[]; rosterSlotsUsed: number };
 export type Bid = { managerId: string; amount: number; submittedAt: string; passed?: boolean };
 export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
-export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[] };
+export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[]; nominatorId?: string; nominationIndexBefore?: number; tieOrderBefore?: string[] };
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[]; ended?: boolean };
 export const hasRosterSpace = (m: Manager) => m.rosterSlotsUsed < (m.rosterLimit ?? 20);
 export const maxBid = (m: Manager) => hasRosterSpace(m) ? m.budget - Math.max(0, (m.rosterLimit ?? 20) - m.rosterSlotsUsed - 1) : 0;
@@ -27,6 +27,24 @@ export function resolveAuction(l: League): Result {
   if(tied.length>1&&winnerId!==c.nominatorId)l.tieOrder=l.tieOrder.filter(id=>id!==winnerId).concat(winnerId);
   const tieRank=(managerId:string)=>managerId===c.nominatorId?-1:priorityBefore.indexOf(managerId);
   const revealedBids=[...c.bids].sort((a,b)=>Number(a.passed)-Number(b.passed)||b.amount-a.amount||tieRank(a.managerId)-tieRank(b.managerId));
-  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:revealedBids};
+  const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:revealedBids,nominatorId:c.nominatorId,nominationIndexBefore:l.nominationIndex,tieOrderBefore:priorityBefore};
   l.results.unshift(result);l.current=null;const nextIndex=nextNominationIndex(l,l.nominationIndex);if(nextIndex<0)l.ended=true;else l.nominationIndex=nextIndex;return result;
+}
+export function undoLastResult(l: League): Result {
+  if (l.current) throw Error("Finish or pause the active auction before undoing a result.");
+  const result=l.results[0];
+  if (!result) throw Error("There is no auction result to undo.");
+  if (result.nominationIndexBefore===undefined||!result.tieOrderBefore) throw Error("This result was created before undo support and cannot be reversed automatically.");
+  const winner=l.managers.find((manager)=>manager.id===result.winnerId);
+  if (!winner) throw Error("The winning team could not be found.");
+  const rosterIndex=winner.roster.lastIndexOf(result.player);
+  if (rosterIndex<0||winner.rosterSlotsUsed<1) throw Error("The winning roster no longer matches this result. Correct it manually instead.");
+  winner.budget+=result.amount;
+  winner.roster.splice(rosterIndex,1);
+  winner.rosterSlotsUsed-=1;
+  l.results.shift();
+  l.nominationIndex=result.nominationIndexBefore;
+  l.tieOrder=[...result.tieOrderBefore];
+  l.ended=false;
+  return result;
 }

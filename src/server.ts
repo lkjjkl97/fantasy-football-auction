@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "
 import { dirname } from "node:path";
 import { Server } from "socket.io";
 import { z } from "zod";
-import { canReveal, hasRosterSpace, maxBid, nextNominationIndex, resolveAuction, type League } from "./auction.js";
+import { canReveal, hasRosterSpace, maxBid, nextNominationIndex, resolveAuction, undoLastResult, type League } from "./auction.js";
 import { buildPublicState } from "./state.js";
 
 const app = express();
@@ -151,6 +151,11 @@ app.post("/api/reset", (req, res) => {
   league.nominationIndex = 0;
   league.tieOrder = [...league.nominationOrder].reverse();
   saveLeague(); broadcast(); res.json({ ok: true });
+});
+app.post("/api/undo", (req, res) => {
+  if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  try { const result = undoLastResult(league); saveLeague(); broadcast(); res.json({ ok: true, player: result.player }); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); }
 });
 app.post("/api/end", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });

@@ -36,7 +36,14 @@ export function buildPublicState(league: League | null, viewerId?: string) {
     tieOrder: league.tieOrder,
     nominationIndex: league.nominationIndex,
     current,
-    results: league.results,
+    results: league.results.map((result) => ({
+      player: result.player,
+      winnerId: result.winnerId,
+      amount: result.amount,
+      winningBid: result.winningBid,
+      tied: result.tied,
+      bids: result.bids
+    })),
     ended: league.ended
   };
 }
