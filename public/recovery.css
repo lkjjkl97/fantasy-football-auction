@@ -24,10 +24,10 @@ main,#app,.card,.live{min-width:0;max-width:100%}
 
 @media(max-width:900px){
   body{overflow-x:hidden}
-  header{padding:18px 12px 14px}
-  main{width:calc(100% - 28px);padding:14px 0 40px;gap:14px}
+  header{padding:18px 18px 14px}
+  main{width:calc(100% - 36px);padding:16px 0 44px;gap:16px}
   #app{display:grid;gap:14px}
-  .card{width:100%;padding:14px;border-radius:12px;overflow-x:hidden}
+  .card{width:100%;padding:18px;border-radius:12px;overflow-x:hidden}
   .live{min-height:0}
   .live>h2{font-size:clamp(34px,10vw,56px);line-height:1;margin:18px 0 8px;letter-spacing:-2px}
   .live-top{gap:8px}
