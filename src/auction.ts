@@ -5,7 +5,7 @@ export type Result = { player: string; winnerId: string; amount: number; winning
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[]; ended?: boolean };
 export const maxBid = (m: Manager) => m.budget - Math.max(0, 20 - m.rosterSlotsUsed - 1);
 export const allResponded = (l: League) => !!l.current && l.current.bids.length === l.managers.length;
-export const canReveal = (l: League, now=Date.now()) => allResponded(l) || (!!l.current && now >= Date.parse(l.current.deadline));
+export const canReveal = (l: League, now=Date.now()) => !!l.current && now >= Date.parse(l.current.deadline);
 export function resolveAuction(l: League): Result {
   const c=l.current;if(!c)throw Error("No auction is open.");const active=c.bids.filter(b=>!b.passed);if(!active.length)throw Error("No valid bids were submitted.");
   const top=Math.max(...active.map(b=>b.amount));const tied=active.filter(b=>b.amount===top).map(b=>b.managerId);let winnerId:string;
