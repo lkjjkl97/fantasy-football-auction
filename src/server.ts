@@ -22,7 +22,11 @@ function loadLeague(): League | null {
   try {
     const saved = JSON.parse(readFileSync(stateFile, "utf8")) as League;
     saved.nominationIndex ??= 0;
-    saved.managers.forEach((manager) => { manager.rosterSlotsUsed ??= manager.roster.length; });
+    saved.managers.forEach((manager) => {
+      manager.rosterSlotsUsed ??= manager.roster.length;
+      manager.rosterLimit ??= 20;
+      manager.startingBudget ??= 300;
+    });
     if (saved.current && !(saved.current as { deadline?: string }).deadline) saved.current = null;
     return saved;
   }
@@ -63,10 +67,13 @@ const findManager = (managerId: string) => league?.managers.find((m) => m.id ===
 app.get("/api/state", (_req, res) => res.json(publicState()));
 app.post("/api/setup", (req, res) => {
   if (league) return res.status(409).json({ error: "League is already set up." });
-  const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({ name: z.string().min(1).max(30), pin: z.string().min(4).max(30) })).min(2).max(20) }).safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 team names, unique team PINs, and a commissioner PIN of at least 4 characters." });
+  const parsed = z.object({ commissionerPin: z.string().min(4), managers: z.array(z.object({
+    name: z.string().min(1).max(30), pin: z.string().min(4).max(30),
+    startingBudget: z.number().int().min(1).max(10000), rosterLimit: z.number().int().min(1).max(100)
+  }).refine((manager) => manager.startingBudget >= manager.rosterLimit)).min(2).max(20) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Use 2–20 teams. Each needs a name, unique PIN, $1–$10,000 budget, and 1–100 roster spots. Budget must be at least the roster size." });
   if (new Set(parsed.data.managers.map((m) => m.pin)).size !== parsed.data.managers.length) return res.status(400).json({ error: "Every team needs a unique PIN." });
-  const managers = parsed.data.managers.map(({ name, pin }) => ({ id: randomUUID(), name, pinHash: hashPin(pin), budget: 300, roster: [] as string[], rosterSlotsUsed: 0 }));
+  const managers = parsed.data.managers.map(({ name, pin, startingBudget, rosterLimit }) => ({ id: randomUUID(), name, pinHash: hashPin(pin), budget: startingBudget, startingBudget, rosterLimit, roster: [] as string[], rosterSlotsUsed: 0 }));
   const nominationOrder = managers.map((m) => m.id);
   league = { commissionerPin: parsed.data.commissionerPin, managers, nominationOrder, tieOrder: [...nominationOrder].reverse(), nominationIndex: 0, current: null, results: [] };
   saveLeague();
@@ -93,7 +100,7 @@ app.post("/api/nominate", (req, res) => {
   const openingBid = Number(req.body.openingBid);
   if (!manager) return res.status(400).json({ error: "The next nominator could not be found." });
   if (!player || !Number.isInteger(openingBid) || openingBid < 1 || openingBid > maxBid(manager)) return res.status(400).json({ error: `Enter a player and an opening bid from $1–$${maxBid(manager)}.` });
-  if (manager.rosterSlotsUsed >= 20) return res.status(400).json({ error: "That manager's roster is full." });
+  if (manager.rosterSlotsUsed >= (manager.rosterLimit ?? 20)) return res.status(400).json({ error: "That manager's roster is full." });
   const openedAt = new Date();
   league.current = { player, nominatorId: manager.id, openingBid, openedAt: openedAt.toISOString(),
     deadline: new Date(openedAt.getTime() + 20000).toISOString(),
@@ -127,7 +134,7 @@ app.post("/api/resolve", (req, res) => {
 });
 app.post("/api/reset", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
-  league.managers.forEach((manager) => { manager.budget = 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
+  league.managers.forEach((manager) => { manager.budget = manager.startingBudget ?? 300; manager.roster = []; manager.rosterSlotsUsed = 0; });
   sessions.clear();
   league.current = null;
   if (revealTimer) clearTimeout(revealTimer);
@@ -160,10 +167,12 @@ app.post("/api/manager-adjust", (req, res) => {
   const manager = league.managers.find((m) => m.id === String(req.body.managerId));
   const budget = Number(req.body.budget);
   const rosterSpotsLeft = Number(req.body.rosterSpotsLeft);
-  if (!manager || !Number.isInteger(budget) || budget < 0 || budget > 300 || !Number.isInteger(rosterSpotsLeft) || rosterSpotsLeft < 0 || rosterSpotsLeft > 20) return res.status(400).json({ error: "Enter $0–$300 and 0–20 roster spots left." });
+  const budgetLimit = manager?.startingBudget ?? 300;
+  const rosterLimit = manager?.rosterLimit ?? 20;
+  if (!manager || !Number.isInteger(budget) || budget < 0 || budget > budgetLimit || !Number.isInteger(rosterSpotsLeft) || rosterSpotsLeft < 0 || rosterSpotsLeft > rosterLimit) return res.status(400).json({ error: `Enter $0–$${budgetLimit} and 0–${rosterLimit} roster spots left.` });
   if (budget < rosterSpotsLeft) return res.status(400).json({ error: `A team with ${rosterSpotsLeft} spots left must retain at least $${rosterSpotsLeft}.` });
   manager.budget = budget;
-  manager.rosterSlotsUsed = 20 - rosterSpotsLeft;
+  manager.rosterSlotsUsed = rosterLimit - rosterSpotsLeft;
   if (manager.roster.length > manager.rosterSlotsUsed) manager.roster = manager.roster.slice(0, manager.rosterSlotsUsed);
   saveLeague(); broadcast(); res.json({ ok: true });
 });

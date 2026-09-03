@@ -26,7 +26,9 @@ export function buildPublicState(league: League | null, viewerId?: string) {
       budget: manager.budget,
       roster: manager.roster,
       rosterSlotsUsed: manager.rosterSlotsUsed,
-      rosterSpotsLeft: 20 - manager.rosterSlotsUsed,
+      rosterLimit: manager.rosterLimit ?? 20,
+      startingBudget: manager.startingBudget ?? 300,
+      rosterSpotsLeft: (manager.rosterLimit ?? 20) - manager.rosterSlotsUsed,
       maxBid: maxBid(manager)
     })),
     nominationOrder: league.nominationOrder,

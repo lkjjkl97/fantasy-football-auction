@@ -1,9 +1,9 @@
-export type Manager = { id: string; name: string; pinHash?: string; budget: number; roster: string[]; rosterSlotsUsed: number };
+export type Manager = { id: string; name: string; pinHash?: string; budget: number; startingBudget?: number; rosterLimit?: number; roster: string[]; rosterSlotsUsed: number };
 export type Bid = { managerId: string; amount: number; submittedAt: string; passed?: boolean };
 export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
 export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[] };
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[]; ended?: boolean };
-export const maxBid = (m: Manager) => m.budget - Math.max(0, 20 - m.rosterSlotsUsed - 1);
+export const maxBid = (m: Manager) => m.budget - Math.max(0, (m.rosterLimit ?? 20) - m.rosterSlotsUsed - 1);
 export const allResponded = (l: League) => !!l.current && l.current.bids.length === l.managers.length;
 export const canReveal = (l: League, now=Date.now()) => !!l.current && now >= Date.parse(l.current.deadline);
 export function resolveAuction(l: League): Result {
