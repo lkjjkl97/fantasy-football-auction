@@ -3,7 +3,16 @@ export type Bid = { managerId: string; amount: number; submittedAt: string; pass
 export type Nomination = { player: string; nominatorId: string; openingBid: number; bids: Bid[]; openedAt: string; deadline: string; paused?: boolean };
 export type Result = { player: string; winnerId: string; amount: number; winningBid: number; tied: boolean; bids: Bid[] };
 export type League = { commissionerPin: string; managers: Manager[]; nominationOrder: string[]; tieOrder: string[]; nominationIndex: number; current: Nomination | null; results: Result[]; ended?: boolean };
-export const maxBid = (m: Manager) => m.budget - Math.max(0, (m.rosterLimit ?? 20) - m.rosterSlotsUsed - 1);
+export const hasRosterSpace = (m: Manager) => m.rosterSlotsUsed < (m.rosterLimit ?? 20);
+export const maxBid = (m: Manager) => hasRosterSpace(m) ? m.budget - Math.max(0, (m.rosterLimit ?? 20) - m.rosterSlotsUsed - 1) : 0;
+export function nextNominationIndex(l: League, afterIndex=l.nominationIndex-1) {
+  for (let offset=1;offset<=l.nominationOrder.length;offset++) {
+    const index=(afterIndex+offset+l.nominationOrder.length)%l.nominationOrder.length;
+    const manager=l.managers.find((candidate)=>candidate.id===l.nominationOrder[index]);
+    if (manager&&hasRosterSpace(manager)) return index;
+  }
+  return -1;
+}
 export const allResponded = (l: League) => !!l.current && l.current.bids.length === l.managers.length;
 export const canReveal = (l: League, now=Date.now()) => !!l.current && now >= Date.parse(l.current.deadline);
 export function resolveAuction(l: League): Result {
@@ -19,5 +28,5 @@ export function resolveAuction(l: League): Result {
   const tieRank=(managerId:string)=>managerId===c.nominatorId?-1:priorityBefore.indexOf(managerId);
   const revealedBids=[...c.bids].sort((a,b)=>Number(a.passed)-Number(b.passed)||b.amount-a.amount||tieRank(a.managerId)-tieRank(b.managerId));
   const result={player:c.player,winnerId,amount,winningBid:top,tied:tied.length>1,bids:revealedBids};
-  l.results.unshift(result);l.current=null;l.nominationIndex=(l.nominationIndex+1)%l.managers.length;return result;
+  l.results.unshift(result);l.current=null;const nextIndex=nextNominationIndex(l,l.nominationIndex);if(nextIndex<0)l.ended=true;else l.nominationIndex=nextIndex;return result;
 }

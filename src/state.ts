@@ -11,7 +11,8 @@ export function buildPublicState(league: League | null, viewerId?: string) {
     paused: league.current.paused,
     responses: league.managers.map((manager) => ({
       managerId: manager.id,
-      submitted: league.current!.bids.some((bid) => bid.managerId === manager.id)
+      submitted: league.current!.bids.some((bid) => bid.managerId === manager.id),
+      eligible: manager.rosterSlotsUsed < (manager.rosterLimit ?? 20)
     })),
     ...(viewerId ? {
       myBid: league.current.bids.find((bid) => bid.managerId === viewerId)?.amount,

@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from "
 import { dirname } from "node:path";
 import { Server } from "socket.io";
 import { z } from "zod";
-import { canReveal, maxBid, resolveAuction, type League } from "./auction.js";
+import { canReveal, hasRosterSpace, maxBid, nextNominationIndex, resolveAuction, type League } from "./auction.js";
 import { buildPublicState } from "./state.js";
 
 const app = express();
@@ -98,6 +98,9 @@ app.post("/api/nominate", (req, res) => {
   if (league.ended) return res.status(400).json({ error: "This league has ended." });
   if (league.current) return res.status(409).json({ error: "Resolve the current auction first." });
   if (req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Commissioner PIN is incorrect." });
+  const eligibleIndex = nextNominationIndex(league);
+  if (eligibleIndex < 0) { league.ended = true; saveLeague(); broadcast(); return res.status(400).json({ error: "Every roster is full." }); }
+  league.nominationIndex = eligibleIndex;
   const manager = findManager(league.nominationOrder[league.nominationIndex]);
   const player = String(req.body.player || "").trim();
   const openingBid = Number(req.body.openingBid);
@@ -115,6 +118,7 @@ app.post("/api/nominate", (req, res) => {
 app.post("/api/bid", (req, res) => {
   const m = sessionManager(req.body.token);
   if (!league || !m || !league.current) return res.status(401).json({ error: "Choose a team and wait for an active auction." });
+  if (!hasRosterSpace(m)) return res.status(400).json({ error: "Your roster is full, so you cannot bid." });
   if (league.current.paused) return res.status(400).json({ error: "Bidding is paused by the commissioner." });
   if (Date.now() > Date.parse(league.current.deadline)) return res.status(400).json({ error: "Bidding has closed." });
   const passed = !!req.body.passed;
@@ -177,6 +181,12 @@ app.post("/api/manager-adjust", (req, res) => {
   manager.budget = budget;
   manager.rosterSlotsUsed = rosterLimit - rosterSpotsLeft;
   if (manager.roster.length > manager.rosterSlotsUsed) manager.roster = manager.roster.slice(0, manager.rosterSlotsUsed);
+  const onDeck = findManager(league.nominationOrder[league.nominationIndex]);
+  if (!league.current && (!onDeck || !hasRosterSpace(onDeck))) {
+    const nextIndex = nextNominationIndex(league);
+    if (nextIndex < 0) league.ended = true;
+    else { league.nominationIndex = nextIndex; league.ended = false; }
+  }
   saveLeague(); broadcast(); res.json({ ok: true });
 });
 
