@@ -128,6 +128,11 @@ app.post("/api/login", (req, res) => {
   sessions.set(token, m.id);
   res.json({ managerId: m.id, token, state: publicState(m.id) });
 });
+app.post("/api/session", (req, res) => {
+  const manager = sessionManager(req.body.token);
+  if (!manager) return res.status(401).json({ error: "Team session expired. Choose your team and enter its PIN again." });
+  res.json({ managerId: manager.id, state: publicState(manager.id) });
+});
 app.post("/api/commissioner-check", (req, res) => {
   if (!league || req.body.commissionerPin !== league.commissionerPin) return res.status(401).json({ error: "Invalid commissioner PIN" });
   res.json({ ok: true });
@@ -272,7 +277,7 @@ app.post("/api/manager-adjust", (req, res) => {
 });
 
 io.on("connection", (socket) => {
-  socket.on("identify", ({ token }) => { const manager = sessionManager(token); if (manager) { socket.data.managerId = manager.id; managerConnected(manager.id); } socket.emit("state", publicState(socket.data.managerId)); });
+  socket.on("identify", ({ token }) => { if (!token) { socket.data.managerId = undefined; socket.emit("state", publicState()); return; } const manager = sessionManager(token); if (manager) { socket.data.managerId = manager.id; managerConnected(manager.id); socket.emit("state", publicState(manager.id)); } else { socket.data.managerId = undefined; socket.emit("session-invalid"); socket.emit("state", publicState()); } });
   socket.on("disconnect", () => { if (socket.data.managerId) managerDisconnected(socket.data.managerId, socket.id); });
   socket.emit("state", publicState());
 });
